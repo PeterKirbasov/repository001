@@ -1,3 +1,4 @@
+
 """
 Программа игры морской бой.
 Автор Кирбасов Петр.
@@ -55,6 +56,14 @@
         Таким образом, обнаружив корабль, компьютер не должен обстреливать соседние клетки с целью
         потопить корабль.
 
+        Каждый из кораблей занимает одну или несколько клеток, и имеет поле вокруг себя, куда
+        нельзя поставить другие корабли. Для разных кораблей разные значения: 1палубный - 9клеток,
+        2п - 11 клеток, 3а - 13 клеток. Таким образом 7 кораблей имеют суммарное поле 71 клетку.
+        В процессе тестирования выяснилось, что расставляя корабли случайным образом может произойти
+        ситуация, при которой бот не может закончить расстановку, потому как не остается свободного места.
+        В этом случае производится 16 попыток расставить корабли, в случае неудачи игра заканчивается.
+
+
 """
 import sys
 import numpy
@@ -87,28 +96,30 @@ class Field:
                                     # 0-пусто,1-корабль,2-мимо,3-ранен или убит
         self.flot = self.setflot(flot) # список объектов-кораблей
 
-    def hod(self,player):   # метод, запрашивает или генерирует координаты выстрела,
+    def hod(self,player):   # полифонический метод, запрашивает или генерирует координаты выстрела,
                             # анализирует результат выстрела, печатает поле,
                             # в случае попадания, повторяет все заново.
         while True:
-            print(*self.visual,sep="\n")    # печать поля
+#            print(*self.visual,sep="\n")    # печать поля
             if player=="user":              # запрос или генерация координат выстрела
+                print(*self.visual, sep="\n")  # печать поля
                 print("приготовьтесь к стрельбе")
                 x=(inputint("Ваш выстрел (номер строки)?"))
                 y=(inputint("Ваш выстрел (номер столбца)?"))
             else:
                 x=random.randint(1,self.size)
                 y=random.randint(1,self.size)
-            print("выстрел",player,x,y)     # печать сообщения
+#            print("выстрел",player,x,y)     # печать сообщения
             z=self.array[(x-1)+(y-1)*self.size]     # запрос статуса клетки.
             if z==0:                                # клетка чистая.
                 self.array[(x - 1) + (y - 1) * self.size] = 2
                 self.visual[x] = self.visual[x][0:4 * y - 1] + "T" + self.visual[x][4 * y:]
-                print("мимо")
+                print("выстрел",player,x,y,"мимо")
             elif z==2:                              # корабля нет, но сюда уже стреляли
                 if player=="bot":                    # боту разрешено повторить выстрел
+#                    print("выстрел ")
                     continue
-                print("поле уже простреляно, мимо")
+                print("выстрел",player,x,y,"поле уже простреляно, мимо")
                 try:
                     raise DoubleShootException      # поднимаем исключние по ТЗ
                 except DoubleShootException:
@@ -116,7 +127,7 @@ class Field:
             elif z==3:
                 if player=="bot":                    # боту разрешено повторить выстрел
                     continue
-                print("Поле простреляно, было попадание")
+                print("выстрел",player,x,y, "Поле простреляно, было попадание")
             elif z==1:                              #  попадание в корабль
                 self.array[(x - 1) + (y - 1) * size] = 3
                 self.visual[x] = self.visual[x][0:4 * y - 1] + "X" + self.visual[x][4 * y:]
@@ -127,11 +138,11 @@ class Field:
                             s.live -= 1
                             self.live -=1
                             if s.live == 0:         # если корабль убит
-                                print("Корабль",s.len,"убит")
+                                print("выстрел",player,x,y,"Корабль",s.len,"убит")
                                 kill = True
                                 break
                             else:
-                                print("Корабль ранен")
+                                print("выстрел",player,x,y,"Корабль ранен")
                     if kill:                        # если корабль убит, отмечаем область вокруг
                                                     # корабля как прострелянную.
                         for dot in s.dots:
@@ -272,7 +283,7 @@ def setuserflot(size, len_of_ships):
 #                x1, y1 = 1, 3
                 # Если координаты корректны то расставляем значки на поле и
                 # вычисляем список координат.
-                print(x,y,x1,y1)
+#                print(x,y,x1,y1)
                 if (x == x1) and (abs(y - y1) == l - 1):            # если корабль расположен горизонтально, длина l
                     c, dots = checkship(x, y, x1, y1, l, size, array)
                     if not c:
@@ -339,37 +350,58 @@ def setship(dots,size,array):                       # ставим 1 в масс
 # на временном поле array[]
 #------------------------------------------------------------------------
 def setmyships(size, shipmask):     # генерируем и проверяем на совместимость координаты кораблей бота.
+    for j in range(16):     # цикл, на случай если все корабли не поместятся на поле.
+        array = None
+        array = list([0] * size ** 2)
+#        print(array)
+        flot = []
+        new_attempt = False
 
-    array=list([0]*size**2)
-    flot=[]
-    for i in shipmask:              # i - берем длину корабля из списка длин.
-        start = random.randint(0, size**2 - 1)  # нос корабля
-        a = start
-        while True:                 # за начало поиска берем точку start.
-            x = a%size+1
-            y = a//size+1
-            if checkaround(x,y,size,array):                      # проверяем точку
-                b, bdots = checkship(x,y,x,y+i-1,i,size,array)   # можно ли
-                c, cdots = checkship(x,y,x+i-1,y,i,size,array)
-                d = bool(random.randint(0,1))
-                if (b and d) or (b and not(c)):                 # логика - какой корабль установить, в зависимости от 3х булей
-                    dots, array = setship(bdots,size,array)
+        for i in shipmask:          # создаем несколько кораблей, в нашем случае 7шт.
+                                    # i - берем длину корабля из списка длин.
+            start = random.randint(0, size**2 - 1)  # нос корабля
+#            print("start",start)
+            a = start
+            while True:                 # за начало поиска берем точку start.
+                                        # цикл, если не удастся создать корабль с
+                                        # с первого раза.
+                x = a%size+1
+                y = a//size+1
+                if checkaround(x,y,size,array):                      # проверяем точку
+                    b, bdots = checkship(x,y,x,y+i-1,i,size,array)   # можно ли
+                    c, cdots = checkship(x,y,x+i-1,y,i,size,array)
+                    d = bool(random.randint(0,1))
+                    if (b and d) or (b and not(c)):                 # логика - какой корабль установить, в зависимости от 3х булей
+                        dots, array = setship(bdots,size,array)
+                        break
+                    elif (c and (not d)) or (c and not(b)):
+                        dots, array = setship(cdots,size,array)
+                        break
+                    else:
+                        pass
+#                print(a,end="")
+                a += 1      # если корабль не встал, то проверяем следующую клетку
+                if a == size**2:
+                    a = 0   # если дошли до последней, то продолжаем с нуля
+                if a == start:
+#                    print("Попытка", j)  # если перебрали все клетки без успеха.
+                    new_attempt = True
+#                    sys.exit()
                     break
-                elif (c and (not d)) or (c and not(b)):
-                    dots, array = setship(cdots,size,array)
-                    break
-                else:
-                    pass
-
-            a += 1      # если корабль не встал, то проверяем следующую клетку
-            if a == size**2:
-                a = 0   # если дошли до последней, то продолжаем с нуля
-            elif a == start:
-                print("Нет места для размещения кораблей")  # если перебрали все клетки без успеха.
-                sys.exit()
-        s = Ship(i,i,dots)      # инициируем корабль
-        flot.append(s)          # добавляем в список
-        pass # выход из цикла, корабль установлен в массив.
+            if new_attempt:
+                break
+            s = Ship(i,i,dots)      # инициируем корабль
+            flot.append(s)          # добавляем в список
+            pass # выход из цикла перебора a, корабль установлен в массив.
+        if new_attempt:
+#            print(array)
+            continue
+#        print(">> выход", array)
+        pass # цикл из 16 попыток
+        break
+    else:
+        print("Нет места для размещения кораблей. Попытки исчерпаны", j)  # если перебрали все клетки без успеха.
+        sys.exit()
     return flot
 
 
@@ -382,6 +414,7 @@ def setmyships(size, shipmask):     # генерируем и проверяем
 
 size = 6  # размер игроввого поля.
 shipmask = [3,2,2,1,1,1,1]  # какие корабли в игре с каждой стороны.
+#shipmask = [1,1,1,1]  # какие корабли в игре с каждой стороны.
 
 
 # инициация поля игры юзера
